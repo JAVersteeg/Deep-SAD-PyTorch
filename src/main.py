@@ -33,7 +33,7 @@ from datasets.main import load_dataset
 @click.option('--ratio_pollution', type=float, default=0.0,
               help='Pollution ratio of unlabeled training data with unknown (unlabeled) anomalies.')
 @click.option('--device', type=str, default='cuda', help='Computation device to use ("cpu", "cuda", "cuda:2", etc.).')
-@click.option('--seed', type=int, default=-1, help='Set seed. If -1, use randomization.')
+@click.option('--seed', type=int, default=1, help='Set seed. If -1, use randomization.')
 @click.option('--optimizer_name', type=click.Choice(['adam']), default='adam',
               help='Name of the optimizer to use for Deep SAD network training.')
 @click.option('--lr', type=float, default=0.001,
