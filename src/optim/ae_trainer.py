@@ -27,14 +27,14 @@ class AETrainer(BaseTrainer):
         logger = logging.getLogger()
 
         # Get train data loader
-        train_loader, _ = dataset.loaders(batch_size=self.batch_size, num_workers=self.n_jobs_dataloader)
+        train_loader, _, _ = dataset.loaders(batch_size=self.batch_size, num_workers=self.n_jobs_dataloader)
 
         # Set loss
         criterion = nn.MSELoss(reduction='none')
 
         # Set device
-        ae_net = ae_net.to(self.device)
-        criterion = criterion.to(self.device)
+        #ae_net = ae_net.to(self.device)
+        #criterion = criterion.to(self.device)
 
         # Set optimizer (Adam optimizer for now)
         optimizer = optim.Adam(ae_net.parameters(), lr=self.lr, weight_decay=self.weight_decay)
@@ -87,7 +87,7 @@ class AETrainer(BaseTrainer):
         logger = logging.getLogger()
 
         # Get test data loader
-        _, test_loader = dataset.loaders(batch_size=self.batch_size, num_workers=self.n_jobs_dataloader)
+        _, test_loader, _ = dataset.loaders(batch_size=self.batch_size, num_workers=self.n_jobs_dataloader)
 
         # Set loss
         criterion = nn.MSELoss(reduction='none')

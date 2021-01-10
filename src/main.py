@@ -3,22 +3,31 @@ import torch
 import logging
 import random
 import numpy as np
+#import cprofile
 
 from utils.config import Config
-from utils.visualization.plot_images_grid import plot_images_grid
+from utils.visualization.plot_images import plot_images_grid, plot_images_hist
 from DeepSAD import DeepSAD
 from datasets.main import load_dataset
+from datetime import datetime
 
+gpu = True
+import os
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+if gpu:
+    os.environ["CUDA_VISIBLE_DEVICES"] = "5" # or "x,y" for multiple gpus
+else:
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 ################################################################################
 # Settings
 ################################################################################
 @click.command()
 @click.argument('dataset_name', type=click.Choice(['mnist', 'fmnist', 'cifar10', 'arrhythmia', 'cardio', 'satellite',
-                                                   'satimage-2', 'shuttle', 'thyroid']))
+                                                   'satimage-2', 'shuttle', 'thyroid', 'crack', 'crack128']))
 @click.argument('net_name', type=click.Choice(['mnist_LeNet', 'fmnist_LeNet', 'cifar10_LeNet', 'arrhythmia_mlp',
                                                'cardio_mlp', 'satellite_mlp', 'satimage-2_mlp', 'shuttle_mlp',
-                                               'thyroid_mlp']))
+                                               'thyroid_mlp', 'crackNet', 'crackNet128']))
 @click.argument('xp_path', type=click.Path(exists=True))
 @click.argument('data_path', type=click.Path(exists=True))
 @click.option('--load_config', type=click.Path(exists=True), default=None,
@@ -69,11 +78,13 @@ from datasets.main import load_dataset
                    'If 0, no anomalies are known.'
                    'If 1, outlier class as specified in --known_outlier_class option.'
                    'If > 1, the specified number of outlier classes will be sampled at random.')
+@click.option('--img_name', type=str, default='', 
+              help='Image file identifier name (default: '')')
 def main(dataset_name, net_name, xp_path, data_path, load_config, load_model, eta,
          ratio_known_normal, ratio_known_outlier, ratio_pollution, device, seed,
          optimizer_name, lr, n_epochs, lr_milestone, batch_size, weight_decay,
          pretrain, ae_optimizer_name, ae_lr, ae_n_epochs, ae_lr_milestone, ae_batch_size, ae_weight_decay,
-         num_threads, n_jobs_dataloader, normal_class, known_outlier_class, n_known_outlier_classes):
+         num_threads, n_jobs_dataloader, normal_class, known_outlier_class, n_known_outlier_classes, img_name):
     """
     Deep SAD, a method for deep semi-supervised anomaly detection.
 
@@ -96,6 +107,9 @@ def main(dataset_name, net_name, xp_path, data_path, load_config, load_model, et
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
+    
+    # Log current date and time
+    logger.info('Current date and time is %s' % datetime.now())
 
     # Print paths
     logger.info('Log file is %s' % log_file)
@@ -206,16 +220,12 @@ def main(dataset_name, net_name, xp_path, data_path, load_config, load_model, et
 
     # Save results, model, and configuration
     deepSAD.save_results(export_json=xp_path + '/results.json')
-    deepSAD.save_model(export_model=xp_path + '/model.tar')
+    deepSAD.save_model(export_model=xp_path + '/model.tar', save_ae=False)
     cfg.save_config(export_json=xp_path + '/config.json')
+    
 
     # Plot most anomalous and most normal test samples
-    indices, labels, scores = zip(*deepSAD.results['test_scores'])
-    indices, labels, scores = np.array(indices), np.array(labels), np.array(scores)
-    idx_all_sorted = indices[np.argsort(scores)]  # from lowest to highest score
-    idx_normal_sorted = indices[labels == 0][np.argsort(scores[labels == 0])]  # from lowest to highest score
-
-    if dataset_name in ('mnist', 'fmnist', 'cifar10'):
+    if dataset_name in ('mnist', 'fmnist', 'cifar10', 'crack', 'crack128'):
 
         if dataset_name in ('mnist', 'fmnist'):
             X_all_low = dataset.test_set.data[idx_all_sorted[:32], ...].unsqueeze(1)
@@ -229,11 +239,79 @@ def main(dataset_name, net_name, xp_path, data_path, load_config, load_model, et
             X_normal_low = torch.tensor(np.transpose(dataset.test_set.data[idx_normal_sorted[:32], ...], (0,3,1,2)))
             X_normal_high = torch.tensor(np.transpose(dataset.test_set.data[idx_normal_sorted[-32:], ...], (0,3,1,2)))
 
-        plot_images_grid(X_all_low, export_img=xp_path + '/all_low', padding=2)
-        plot_images_grid(X_all_high, export_img=xp_path + '/all_high', padding=2)
-        plot_images_grid(X_normal_low, export_img=xp_path + '/normals_low', padding=2)
-        plot_images_grid(X_normal_high, export_img=xp_path + '/normals_high', padding=2)
+        plot_imgs = True
+        indices, labels, scores = zip(*deepSAD.results['test_scores (corner)'])
+        indices, labels, scores = np.array(indices), np.array(labels), np.array(scores)
+        idx_all_sorted = indices[np.argsort(scores)]  # from lowest to highest score
+        idx_normal_sorted = indices[labels == 0][np.argsort(scores[labels == 0])]  # from lowest to highest score
+        idx_outlier_sorted = indices[labels == 1][np.argsort(scores[labels == 1])]  # from lowest to highest score
 
+        if dataset_name == 'crack':
+            corner = False
+            mid = len(idx_all_sorted)/2
+            if len(idx_all_sorted) > 64 and len(idx_normal_sorted) > 64 and len(idx_outlier_sorted) > 100 and corner:
+                plot_imgs = True
+                #X_middle = torch.reshape(torch.tensor(dataset.test_set.data[idx_all_sorted[int(mid-312):int(mid+313)], ...]), (625,64,64)).unsqueeze(1)
+                X_all_normal = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_all_sorted[:64], ...]), (64,64,64)).unsqueeze(1)
+                X_all_outlier = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_all_sorted[-144:], ...]), (144,64,64)).unsqueeze(1)
+                X_normals_normal = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_normal_sorted[:64], ...]), (64,64,64)).unsqueeze(1)
+                X_normals_outlier = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_normal_sorted[-64:], ...]), (64,64,64)).unsqueeze(1)
+                X_outliers_normal = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_outlier_sorted[:100], ...]), (100,64,64)).unsqueeze(1)
+                X_outliers_outlier = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_outlier_sorted[-100:], ...]), (100,64,64)).unsqueeze(1)
+            elif len(idx_all_sorted) > 64 and len(idx_normal_sorted) > 64 and len(idx_outlier_sorted) > 100 and not corner:
+                plot_imgs = True
+                #X_middle = torch.reshape(torch.tensor(dataset.test_set.data[idx_all_sorted[int(mid-312):int(mid+313)], ...]), (625,64,64)).unsqueeze(1)
+                X_all_normal = torch.reshape(torch.tensor(dataset.test_set.data[idx_all_sorted[:64], ...]), (64,64,64)).unsqueeze(1)
+                X_all_outlier = torch.reshape(torch.tensor(dataset.test_set.data[idx_all_sorted[-144:], ...]), (144,64,64)).unsqueeze(1)
+                X_normals_normal = torch.reshape(torch.tensor(dataset.test_set.data[idx_normal_sorted[:64], ...]), (64,64,64)).unsqueeze(1)
+                X_normals_outlier = torch.reshape(torch.tensor(dataset.test_set.data[idx_normal_sorted[-64:], ...]), (64,64,64)).unsqueeze(1)
+                X_outliers_normal = torch.reshape(torch.tensor(dataset.test_set.data[idx_outlier_sorted[:100], ...]), (100,64,64)).unsqueeze(1)
+                X_outliers_outlier = torch.reshape(torch.tensor(dataset.test_set.data[idx_outlier_sorted[-100:], ...]), (100,64,64)).unsqueeze(1)
+            else:
+                plot_imgs = False
+                X_all_normal = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_all_sorted[:1], ...]), (1,64,64)).unsqueeze(1)
+                X_all_outlier = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_all_sorted[-1:], ...]), (1,64,64)).unsqueeze(1)
+                X_normals_normal = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_normal_sorted[:1], ...]), (1,64,64)).unsqueeze(1)
+                X_normals_outlier = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_normal_sorted[-1:], ...]), (1,64,64)).unsqueeze(1)
+                X_outliers_normal = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_outlier_sorted[:1], ...]), (1,64,64)).unsqueeze(1)
+                X_outliers_outlier = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_outlier_sorted[-1:], ...]), (1,64,64)).unsqueeze(1)
+                
+        if dataset_name == 'crack128':
+            mid = len(idx_all_sorted)/2
+            if len(idx_all_sorted) > 64 and len(idx_normal_sorted) > 64 and len(idx_outlier_sorted) > 100:                
+                #X_middle = torch.reshape(torch.tensor(dataset.test_set.data[idx_all_sorted[int(mid-312):int(mid+313)], ...]), (625,128,128)).unsqueeze(1)
+                X_all_normal = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_all_sorted[:64], ...]), (64,128,128)).unsqueeze(1)
+                X_all_outlier = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_all_sorted[-144:], ...]), (144,128,128)).unsqueeze(1)
+                X_normals_normal = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_normal_sorted[:64], ...]), (64,128,128)).unsqueeze(1)
+                X_normals_outlier = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_normal_sorted[-64:], ...]), (64,128,128)).unsqueeze(1)
+                X_outliers_normal = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_outlier_sorted[:100], ...]), (100,128,128)).unsqueeze(1)
+                X_outliers_outlier = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_outlier_sorted[-100:], ...]), (100,128,128)).unsqueeze(1)
+            else:
+                plot_imgs = False
+                X_all_normal = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_all_sorted[:1], ...]), (1,128,128)).unsqueeze(1)
+                X_all_outlier = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_all_sorted[-1:], ...]), (1,128,128)).unsqueeze(1)
+                X_normals_normal = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_normal_sorted[:1], ...]), (1,128,128)).unsqueeze(1)
+                X_normals_outlier = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_normal_sorted[-1:], ...]), (1,128,128)).unsqueeze(1)
+                X_outliers_normal = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_outlier_sorted[:1], ...]), (1,128,128)).unsqueeze(1)
+                X_outliers_outlier = torch.reshape(torch.tensor(dataset.test_set_corner.data[idx_outlier_sorted[-1:], ...]), (1,128,128)).unsqueeze(1)
 
+        if plot_imgs:
+            #plot_images_grid(X_middle, export_img=xp_path + '/plots/' + img_name + '_all_middle_', title='All samples', padding=2, nrow=25)
+            #plot_images_grid(X_all_normal, export_img=xp_path + '/plots/' + img_name + '_all_low_', title='Least anomalous samples', padding=2, nrow=8)
+            plot_images_grid(X_all_outlier, export_img=xp_path + '/plots/' + img_name + '_all_high_', title='Most anomalous samples', padding=2, nrow=12)
+            #plot_images_grid(X_normals_normal, export_img=xp_path + '/plots/' + img_name + '_normals_low_', title='Least anomalous normal samples', padding=2, nrow=8)
+            plot_images_grid(X_normals_outlier, export_img=xp_path + '/plots/' + img_name + '_normals_high_', title='Most anmalous normal samples', padding=2, nrow=8)
+            plot_images_grid(X_outliers_normal, export_img=xp_path + '/plots/' + img_name + '_outliers_low_', title='Least anomalous anomaly samples', padding=2, nrow=10)
+            plot_images_grid(X_outliers_outlier, export_img=xp_path + '/plots/' + img_name + '_outliers_high_', title='Most anomalous anomaly samples', padding=2, nrow=10)
+            
+        test_auc = deepSAD.results['test_auc']
+        test_auc_corner = deepSAD.results['test_auc (corner)']
+        plot_images_hist(scores[labels == 0], scores[labels == 1], export_img=xp_path + '/plots/' + img_name + '_hist_corner', title='Deep SAD Anomaly scores of normal and crack samples (with corner cracks)', auc=test_auc_corner)
+        
+        indices, labels, scores = zip(*deepSAD.results['test_scores'])
+        indices, labels, scores = np.array(indices), np.array(labels), np.array(scores)
+        plot_images_hist(scores[labels == 0], scores[labels == 1], export_img=xp_path + '/plots/' + img_name + '_hist', title='Deep SAD anomaly scores of normal and crack samples', auc=test_auc)
+    
+            
 if __name__ == '__main__':
     main()

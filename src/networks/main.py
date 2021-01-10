@@ -1,6 +1,7 @@
 from .mnist_LeNet import MNIST_LeNet, MNIST_LeNet_Autoencoder
 from .fmnist_LeNet import FashionMNIST_LeNet, FashionMNIST_LeNet_Autoencoder
 from .cifar10_LeNet import CIFAR10_LeNet, CIFAR10_LeNet_Autoencoder
+from .crack_net import Crack_Architecture_Encoder, Crack_Architecture_Autoencoder
 from .mlp import MLP, MLP_Autoencoder
 from .vae import VariationalAutoencoder
 from .dgm import DeepGenerativeModel, StackedDeepGenerativeModel
@@ -13,9 +14,8 @@ def build_network(net_name, ae_net=None):
                             'fmnist_LeNet', 'fmnist_DGM_M2', 'fmnist_DGM_M1M2',
                             'cifar10_LeNet', 'cifar10_DGM_M2', 'cifar10_DGM_M1M2',
                             'arrhythmia_mlp', 'cardio_mlp', 'satellite_mlp', 'satimage-2_mlp', 'shuttle_mlp',
-                            'thyroid_mlp',
-                            'arrhythmia_DGM_M2', 'cardio_DGM_M2', 'satellite_DGM_M2', 'satimage-2_DGM_M2',
-                            'shuttle_DGM_M2', 'thyroid_DGM_M2')
+                            'thyroid_mlp', 'arrhythmia_DGM_M2', 'cardio_DGM_M2', 'satellite_DGM_M2', 
+                            'satimage-2_DGM_M2', 'shuttle_DGM_M2', 'thyroid_DGM_M2', 'crackNet', 'crackNet128')
     assert net_name in implemented_networks
 
     net = None
@@ -83,6 +83,12 @@ def build_network(net_name, ae_net=None):
     if net_name == 'thyroid_DGM_M2':
         net = DeepGenerativeModel([6, 2, 4, [32, 16]])
 
+    if net_name == 'crackNet':
+        net = Crack_Architecture_Encoder()
+    
+    if net_name == 'crackNet128':
+        net = Crack_Architecture_Encoder(rep_dim=128)
+
     return net
 
 
@@ -92,8 +98,10 @@ def build_autoencoder(net_name):
     implemented_networks = ('mnist_LeNet', 'mnist_DGM_M1M2',
                             'fmnist_LeNet', 'fmnist_DGM_M1M2',
                             'cifar10_LeNet', 'cifar10_DGM_M1M2',
-                            'arrhythmia_mlp', 'cardio_mlp', 'satellite_mlp', 'satimage-2_mlp', 'shuttle_mlp',
-                            'thyroid_mlp')
+                            'arrhythmia_mlp', 'cardio_mlp', 
+                            'satellite_mlp', 'satimage-2_mlp',
+                            'shuttle_mlp', 'thyroid_mlp',
+                            'crackNet', 'crackNet128')
 
     assert net_name in implemented_networks
 
@@ -134,5 +142,11 @@ def build_autoencoder(net_name):
 
     if net_name == 'thyroid_mlp':
         ae_net = MLP_Autoencoder(x_dim=6, h_dims=[32, 16], rep_dim=4, bias=False)
+     
+    if net_name == 'crackNet':
+        ae_net = Crack_Architecture_Autoencoder()
+    
+    if net_name == 'crackNet128':
+        ae_net = Crack_Architecture_Autoencoder(rep_dim=128)
 
     return ae_net

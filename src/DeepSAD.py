@@ -45,6 +45,10 @@ class DeepSAD(object):
             'test_auc': None,
             'test_time': None,
             'test_scores': None,
+            'train_time (corner)': None,
+            'test_auc (corner)': None,
+            'test_time (corner)': None,
+            'test_scores (corner)': None,
         }
 
         self.ae_results = {
@@ -78,12 +82,21 @@ class DeepSAD(object):
         if self.trainer is None:
             self.trainer = DeepSADTrainer(self.c, self.eta, device=device, n_jobs_dataloader=n_jobs_dataloader)
 
-        self.trainer.test(dataset, self.net)
+        # To test on two different test sets, one with and one without corner cracks.
+        corner_cracks = False
 
-        # Get results
+        self.trainer.test(dataset, self.net, corner_cracks=corner_cracks)
         self.results['test_auc'] = self.trainer.test_auc
         self.results['test_time'] = self.trainer.test_time
         self.results['test_scores'] = self.trainer.test_scores
+
+        corner_cracks = True
+        self.trainer.test(dataset, self.net, corner_cracks=corner_cracks)
+        self.results['test_auc (corner)'] = self.trainer.test_auc
+        self.results['test_time (corner)'] = self.trainer.test_time
+        self.results['test_scores (corner)'] = self.trainer.test_scores
+        
+        return self.results
 
     def pretrain(self, dataset: BaseADDataset, optimizer_name: str = 'adam', lr: float = 0.001, n_epochs: int = 100,
                  lr_milestones: tuple = (), batch_size: int = 128, weight_decay: float = 1e-6, device: str = 'cuda',

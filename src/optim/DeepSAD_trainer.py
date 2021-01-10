@@ -36,7 +36,7 @@ class DeepSADTrainer(BaseTrainer):
         logger = logging.getLogger()
 
         # Get train data loader
-        train_loader, _ = dataset.loaders(batch_size=self.batch_size, num_workers=self.n_jobs_dataloader)
+        train_loader, _, _ = dataset.loaders(batch_size=self.batch_size, num_workers=self.n_jobs_dataloader)
 
         # Set device for network
         net = net.to(self.device)
@@ -66,6 +66,7 @@ class DeepSADTrainer(BaseTrainer):
             epoch_loss = 0.0
             n_batches = 0
             epoch_start_time = time.time()
+            counter = 0
             for data in train_loader:
                 inputs, _, semi_targets, _ = data
                 inputs, semi_targets = inputs.to(self.device), semi_targets.to(self.device)
@@ -83,6 +84,9 @@ class DeepSADTrainer(BaseTrainer):
 
                 epoch_loss += loss.item()
                 n_batches += 1
+                counter += 1
+                if counter == 5000:
+                    break
 
             # log epoch statistics
             epoch_train_time = time.time() - epoch_start_time
@@ -95,14 +99,17 @@ class DeepSADTrainer(BaseTrainer):
 
         return net
 
-    def test(self, dataset: BaseADDataset, net: BaseNet):
+    def test(self, dataset: BaseADDataset, net: BaseNet, corner_cracks = False):
         logger = logging.getLogger()
 
         # Get test data loader
-        _, test_loader = dataset.loaders(batch_size=self.batch_size, num_workers=self.n_jobs_dataloader)
+        if not corner_cracks:
+            _, test_loader, _ = dataset.loaders(batch_size=self.batch_size, num_workers=self.n_jobs_dataloader)
+        else:
+            _, _, test_loader = dataset.loaders(batch_size=self.batch_size, num_workers=self.n_jobs_dataloader)
 
         # Set device for network
-        net = net.to(self.device)
+        net.to(self.device)
 
         # Testing
         logger.info('Starting testing...')
@@ -144,10 +151,17 @@ class DeepSADTrainer(BaseTrainer):
         self.test_auc = roc_auc_score(labels, scores)
 
         # Log results
-        logger.info('Test Loss: {:.6f}'.format(epoch_loss / n_batches))
-        logger.info('Test AUC: {:.2f}%'.format(100. * self.test_auc))
-        logger.info('Test Time: {:.3f}s'.format(self.test_time))
-        logger.info('Finished testing.')
+        if not corner_cracks:
+            logger.info('Test Loss: {:.6f}'.format(epoch_loss / n_batches))
+            logger.info('Test AUC: {:.2f}%'.format(100. * self.test_auc))
+            logger.info('Test Time: {:.3f}s'.format(self.test_time))
+            logger.info('Finished testing.')
+        else:
+            logger.info('Test Loss (corner): {:.6f}'.format(epoch_loss / n_batches))
+            logger.info('Test AUC (corner): {:.2f}%'.format(100. * self.test_auc))
+            logger.info('Test Time (corner): {:.3f}s'.format(self.test_time))
+            logger.info('Finished testing (corner).')
+
 
     def init_center_c(self, train_loader: DataLoader, net: BaseNet, eps=0.1):
         """Initialize hypersphere center c as the mean from an initial forward pass on the data."""
