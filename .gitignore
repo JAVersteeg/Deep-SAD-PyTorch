@@ -1,9 +1,7 @@
 log/
-log\
-log/DeepSAD/
 imgs/
-log\
 
 deep_sad_command.txt
 requirements_commands.txt
 src/nohup.out
+deep_sad_command.txt
